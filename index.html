@@ -17,6 +17,27 @@
     </style>
 </head>
 <body>
+    <div id="ui-controls" style="position:absolute;top:10px;right:10px;z-index:20;display:flex;flex-direction:column;gap:8px;align-items:flex-end;">
+        <select id="instrument-select" style="padding:4px 8px;">
+            <option value="piano">Piano</option>
+            <option value="nylon">Guitarra Nylon</option>
+            <option value="steel">Guitarra Acero</option>
+            <option value="violin">Violín</option>
+            <option value="cello">Violonchelo</option>
+            <option value="bass">Bajo Eléctrico</option>
+        </select>
+        <select id="palette-select" style="padding:4px 8px;">
+            <option value="warm">Paleta Cálida</option>
+            <option value="cool">Paleta Fría</option>
+            <option value="neutral">Paleta Neutra</option>
+        </select>
+        <div style="display:flex;gap:6px;">
+            <button id="fullscreen-btn" style="padding:4px 10px;">Pantalla completa</button>
+            <button id="reset-btn" style="padding:4px 10px;">Reset vista</button>
+        </div>
+    </div>
+    <input type="file" id="midi-input" accept=".mid,.midi" style="position:absolute;z-index:10;top:10px;left:10px;" />
+    <button id="play-midi" style="position:absolute;z-index:10;top:10px;left:180px;">Reproducir MIDI</button>
     <script type="module" src="/src/main.js"></script>
 </body>
 </html> 

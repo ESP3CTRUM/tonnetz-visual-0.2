@@ -6,6 +6,12 @@ import { midiManager } from './midi.js';
 import * as Tone from 'tone';
 import TWEEN from '@tweenjs/tween.js';
 
+const PALETTES = {
+    warm: { node: '#FF5733', line: '#FFC300', background: '#F2A65A' },
+    cool: { node: '#3498DB', line: '#2ECC71', background: '#B3B6B7' },
+    neutral: { node: '#808080', line: '#A9A9A9', background: '#D3D3D3' }
+};
+
 class TonnetzVisualizer {
     constructor() {
         this.scene = new THREE.Scene();
@@ -48,6 +54,11 @@ class TonnetzVisualizer {
 
         // Manejo de redimensionamiento de ventana
         window.addEventListener('resize', this.onWindowResize.bind(this));
+
+        // UI/UX
+        this.currentPalette = 'warm';
+        this.applyPalette('warm');
+        this.setupUIControls();
 
         // Iniciar el bucle de renderizado
         this.animate();
@@ -206,6 +217,49 @@ class TonnetzVisualizer {
         this.controls.update();
         TWEEN.update();
         this.renderer.render(this.scene, this.camera);
+    }
+
+    setupUIControls() {
+        // Instrumento
+        const instrumentSelect = document.getElementById('instrument-select');
+        instrumentSelect.addEventListener('change', async (e) => {
+            await audioEngine.setInstrument(e.target.value);
+        });
+        // Pantalla completa
+        document.getElementById('fullscreen-btn').onclick = () => {
+            const elem = document.documentElement;
+            if (!document.fullscreenElement) {
+                if (elem.requestFullscreen) elem.requestFullscreen();
+            } else {
+                if (document.exitFullscreen) document.exitFullscreen();
+            }
+        };
+        // Reset de vista
+        document.getElementById('reset-btn').onclick = () => {
+            this.camera.position.set(0, 0, 10);
+            this.controls.reset();
+        };
+        // Selector de paleta
+        const paletteSelect = document.getElementById('palette-select');
+        paletteSelect.addEventListener('change', (e) => {
+            this.applyPalette(e.target.value);
+        });
+    }
+
+    applyPalette(paletteName) {
+        const palette = PALETTES[paletteName];
+        if (!palette) return;
+        this.currentPalette = paletteName;
+        // Fondo
+        this.renderer.setClearColor(palette.background);
+        // Nodos
+        for (const node of this.tonnetzGrid.nodes.values()) {
+            node.material.color.set(palette.node);
+        }
+        // Conexiones
+        for (const conn of this.tonnetzGrid.connections) {
+            conn.material.color.set(palette.line);
+        }
     }
 }
 
