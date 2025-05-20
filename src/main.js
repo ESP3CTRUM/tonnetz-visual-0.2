@@ -1,6 +1,16 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TonnetzGrid } from './TonnetzGrid.js';
+import { audioEngine } from './audio.js';
+import { midiManager } from './midi.js';
+import * as Tone from 'tone';
+import TWEEN from '@tweenjs/tween.js';
+
+const PALETTES = {
+    warm: { node: '#FF5733', line: '#FFC300', background: '#F2A65A' },
+    cool: { node: '#3498DB', line: '#2ECC71', background: '#B3B6B7' },
+    neutral: { node: '#808080', line: '#A9A9A9', background: '#D3D3D3' }
+};
 
 class TonnetzVisualizer {
     constructor() {
@@ -31,36 +41,164 @@ class TonnetzVisualizer {
         // Configurar raycaster para interacción
         this.raycaster = new THREE.Raycaster();
         this.mouse = new THREE.Vector2();
+        this.activeNodes = new Set();
+        this.activeTriads = new Set();
         this.setupInteraction();
+
+        // MIDI
+        this.midiLoaded = false;
+        this.midiEvents = [];
+        this.midiNoteToNodeId = this.buildMidiNoteToNodeId();
+        this.setupMidiInput();
+        this.setupMidiPlayback();
 
         // Manejo de redimensionamiento de ventana
         window.addEventListener('resize', this.onWindowResize.bind(this));
 
         // Iniciar el bucle de renderizado
         this.animate();
+
+        this.currentPalette = 'warm';
+        this.applyPalette('warm');
+        this.setupUIControls();
+    }
+
+    buildMidiNoteToNodeId() {
+        const map = {};
+        for (const [id, note] of this.tonnetzGrid.nodeNotes.entries()) {
+            const midiNumber = this.noteToMidiNumber(note);
+            map[midiNumber] = id;
+        }
+        return map;
+    }
+
+    noteToMidiNumber(note) {
+        const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+        const match = note.match(/^([A-G]#?)(\d)$/);
+        if (!match) return null;
+        const pitch = match[1];
+        const octave = parseInt(match[2], 10);
+        return notes.indexOf(pitch) + 12 * (octave + 1);
+    }
+
+    setupMidiInput() {
+        const input = document.getElementById('midi-input');
+        input.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const arrayBuffer = event.target.result;
+                midiManager.parse(arrayBuffer);
+                this.midiEvents = midiManager.getNoteEvents();
+                this.midiLoaded = true;
+                alert('Archivo MIDI cargado correctamente.');
+            };
+            reader.readAsArrayBuffer(file);
+        });
+    }
+
+    setupMidiPlayback() {
+        const playBtn = document.getElementById('play-midi');
+        playBtn.addEventListener('click', async () => {
+            if (!this.midiLoaded || this.midiEvents.length === 0) {
+                alert('Primero carga un archivo MIDI.');
+                return;
+            }
+            await audioEngine.resumeContext();
+            Tone.Transport.cancel();
+            Tone.Transport.stop();
+            Tone.Transport.position = 0;
+
+            const ticksPerBeat = midiManager.getTicksPerBeat();
+            const tempo = midiManager.getTempo();
+            Tone.Transport.bpm.value = tempo;
+            for (const event of this.midiEvents) {
+                const time = (event.time / ticksPerBeat) * (60 / tempo);
+                Tone.Transport.schedule((t) => {
+                    const nodeId = this.midiNoteToNodeId[event.note];
+                    if (nodeId) {
+                        this.animateNode(nodeId, 0x00ff00);
+                        const note = this.tonnetzGrid.getNodeNote(nodeId);
+                        if (note) {
+                            audioEngine.playNote(note, '8n');
+                        }
+                    }
+                }, time);
+            }
+            Tone.Transport.start();
+        });
+    }
+
+    animateNode(nodeId, color) {
+        const node = this.tonnetzGrid.nodes.get(nodeId);
+        if (!node) return;
+        // Animar color
+        const origColor = node.material.color.clone();
+        new TWEEN.Tween(node.material.color)
+            .to({ r: ((color >> 16) & 0xff) / 255, g: ((color >> 8) & 0xff) / 255, b: (color & 0xff) / 255 }, 150)
+            .yoyo(true)
+            .repeat(1)
+            .start();
+        // Animar escala
+        new TWEEN.Tween(node.scale)
+            .to({ x: 1.5, y: 1.5, z: 1.5 }, 150)
+            .yoyo(true)
+            .repeat(1)
+            .start();
+    }
+
+    animateTriad(triad, color) {
+        if (!triad) return;
+        // Animar color
+        new TWEEN.Tween(triad.material.color)
+            .to({ r: ((color >> 16) & 0xff) / 255, g: ((color >> 8) & 0xff) / 255, b: (color & 0xff) / 255 }, 150)
+            .yoyo(true)
+            .repeat(1)
+            .start();
+        // Animar escala
+        new TWEEN.Tween(triad.scale)
+            .to({ x: 1.5, y: 1.5, z: 1.5 }, 150)
+            .yoyo(true)
+            .repeat(1)
+            .start();
     }
 
     setupInteraction() {
-        window.addEventListener('click', (event) => {
-            // Calcular posición del mouse en coordenadas normalizadas (-1 a +1)
+        window.addEventListener('click', async (event) => {
+            await audioEngine.resumeContext();
             this.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
             this.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-
-            // Actualizar el raycaster
             this.raycaster.setFromCamera(this.mouse, this.camera);
-
-            // Obtener intersecciones con los nodos
-            const intersects = this.raycaster.intersectObjects(
-                Array.from(this.tonnetzGrid.nodes.values())
-            );
-
+            // Buscar intersección con nodos y triángulos
+            const objects = [
+                ...Array.from(this.tonnetzGrid.nodes.values()),
+                ...this.tonnetzGrid.triads
+            ];
+            const intersects = this.raycaster.intersectObjects(objects);
             if (intersects.length > 0) {
-                const node = intersects[0].object;
-                // Encontrar el ID del nodo
-                for (const [id, mesh] of this.tonnetzGrid.nodes.entries()) {
-                    if (mesh === node) {
-                        this.tonnetzGrid.updateNodeColor(id, 0xff0000);
-                        break;
+                const obj = intersects[0].object;
+                if (obj.userData.type === 'node') {
+                    // Animar nodo
+                    for (const [id, mesh] of this.tonnetzGrid.nodes.entries()) {
+                        if (mesh === obj) {
+                            this.animateNode(id, 0xff0000);
+                            const note = this.tonnetzGrid.getNodeNote(id);
+                            if (note) {
+                                audioEngine.playNote(note);
+                            }
+                            break;
+                        }
+                    }
+                } else if (obj.userData.type === 'triad') {
+                    // Animar triada y sus nodos
+                    this.animateTriad(obj, 0xffff00);
+                    for (const node of obj.userData.nodes) {
+                        for (const [id, mesh] of this.tonnetzGrid.nodes.entries()) {
+                            if (mesh === node) {
+                                this.animateNode(id, 0xffff00);
+                            }
+                        }
                     }
                 }
             }
@@ -76,9 +214,52 @@ class TonnetzVisualizer {
     animate() {
         requestAnimationFrame(this.animate.bind(this));
         this.controls.update();
+        TWEEN.update();
         this.renderer.render(this.scene, this.camera);
+    }
+
+    setupUIControls() {
+        // Instrumento
+        const instrumentSelect = document.getElementById('instrument-select');
+        instrumentSelect.addEventListener('change', async (e) => {
+            await audioEngine.setInstrument(e.target.value);
+        });
+        // Pantalla completa
+        document.getElementById('fullscreen-btn').onclick = () => {
+            const elem = document.documentElement;
+            if (!document.fullscreenElement) {
+                if (elem.requestFullscreen) elem.requestFullscreen();
+            } else {
+                if (document.exitFullscreen) document.exitFullscreen();
+            }
+        };
+        // Reset de vista
+        document.getElementById('reset-btn').onclick = () => {
+            this.camera.position.set(0, 0, 10);
+            this.controls.reset();
+        };
+        // Selector de paleta
+        const paletteSelect = document.getElementById('palette-select');
+        paletteSelect.addEventListener('change', (e) => {
+            this.applyPalette(e.target.value);
+        });
+    }
+
+    applyPalette(paletteName) {
+        const palette = PALETTES[paletteName];
+        if (!palette) return;
+        this.currentPalette = paletteName;
+        // Fondo
+        this.renderer.setClearColor(palette.background);
+        // Nodos
+        for (const node of this.tonnetzGrid.nodes.values()) {
+            node.material.color.set(palette.node);
+        }
+        // Conexiones
+        for (const conn of this.tonnetzGrid.connections) {
+            conn.material.color.set(palette.line);
+        }
     }
 }
 
-// Iniciar la aplicación
 const app = new TonnetzVisualizer(); 
