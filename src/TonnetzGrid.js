@@ -90,34 +90,6 @@ export class TonnetzGrid {
         return this.nodeNotes.get(nodeId);
     }
 
-    createConnection(node1, node2) {
-        const start = node1.position;
-        const end = node2.position;
-        
-        // Calcular la dirección y longitud del cilindro
-        const direction = new THREE.Vector3().subVectors(end, start);
-        const length = direction.length();
-        
-        // Crear geometría del cilindro
-        const cylinderGeometry = new THREE.CylinderGeometry(0.12, 0.12, length, 32);
-        
-        // Crear el cilindro
-        const cylinder = new THREE.Mesh(cylinderGeometry, this.connectionMaterial);
-        
-        // Posicionar y orientar el cilindro
-        const midpoint = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
-        cylinder.position.copy(midpoint);
-        
-        // Orientar el cilindro para que apunte de start a end
-        cylinder.quaternion.setFromUnitVectors(
-            new THREE.Vector3(0, 1, 0),
-            direction.normalize()
-        );
-        
-        this.scene.add(cylinder);
-        this.connections.push(cylinder);
-    }
-
     updateNodeColor(nodeId, color) {
         const node = this.nodes.get(nodeId);
         if (node) {
@@ -143,4 +115,4 @@ export class TonnetzGrid {
             triad.scale.set(scale, scale, scale);
         }
     }
-} 
+}

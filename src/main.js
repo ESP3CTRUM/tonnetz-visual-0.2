@@ -55,12 +55,13 @@ class TonnetzVisualizer {
         // Manejo de redimensionamiento de ventana
         window.addEventListener('resize', this.onWindowResize.bind(this));
 
-        // Iniciar el bucle de renderizado
-        this.animate();
-
+        // UI/UX
         this.currentPalette = 'warm';
         this.applyPalette('warm');
         this.setupUIControls();
+
+        // Iniciar el bucle de renderizado
+        this.animate();
     }
 
     buildMidiNoteToNodeId() {
@@ -262,4 +263,4 @@ class TonnetzVisualizer {
     }
 }
 
-const app = new TonnetzVisualizer(); 
+const app = new TonnetzVisualizer();
