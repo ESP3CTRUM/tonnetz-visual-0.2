@@ -129,8 +129,9 @@ class TonnetzVisualizer {
                     const nodeId = this.midiNoteToNodeId[event.note];
                     if (nodeId) {
                         this.animateNode(nodeId, 0x00ff00);
-                        const note = this.tonnetzGrid.getNodeNote(nodeId);
+                        const note = this.tonnetzGrid.nodeNotes.get(nodeId);
                         if (note) {
+                            console.log('Attempting to play note from MIDI:', note);
                             audioEngine.playNote(note, '8n');
                         }
                     }
@@ -209,8 +210,9 @@ class TonnetzVisualizer {
                     for (const [id, mesh] of this.tonnetzGrid.nodes.entries()) {
                         if (mesh === node) {
                             this.animateNode(id, 0xffff00);
-                            const note = this.tonnetzGrid.getNodeNote(id);
+                            const note = this.tonnetzGrid.nodeNotes.get(id);
                             if (note) {
+                                console.log('Attempting to play note from Triad click:', note);
                                 audioEngine.playNote(note);
                             }
                         }
@@ -225,8 +227,9 @@ class TonnetzVisualizer {
                 for (const [id, mesh] of this.tonnetzGrid.nodes.entries()) {
                     if (mesh === obj) {
                         this.animateNode(id, 0xff0000);
-                        const note = this.tonnetzGrid.getNodeNote(id);
+                        const note = this.tonnetzGrid.nodeNotes.get(id);
                         if (note) {
+                            console.log('Attempting to play note from Node click:', note);
                             audioEngine.playNote(note);
                         }
                         break;
@@ -346,11 +349,16 @@ loadingManager.onLoad = () => {
 // Modificar la inicialización para esperar a que todo esté listo
 async function startApp() {
     // Esperar a que el instrumento de audio cargue
+    console.log('Iniciando inicialización de audioEngine...');
     await audioEngine.init();
+    console.log('audioEngine inicializado.');
     // Inicializar visualizador
+    console.log('Iniciando inicialización de TonnetzVisualizer...');
     const app = new TonnetzVisualizer();
+    console.log('TonnetzVisualizer inicializado.');
     // Ocultar overlay si todo está listo
     loadingManager.onLoad();
+    console.log('loadingManager.onLoad() llamado.');
 }
 
 startApp();

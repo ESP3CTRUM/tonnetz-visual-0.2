@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-const NOTES = ['C', 'C#/Db', 'D', 'D#/Eb', 'E', 'F', 'F#/Gb', 'G', 'G#/Ab', 'A', 'A#/Bb', 'B'];
+const NOTES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
 export class TonnetzGrid {
     constructor(scene) {
@@ -50,7 +50,7 @@ export class TonnetzGrid {
         const v2 = new THREE.Vector3(0.5, Math.sqrt(3)/2, 0); // tercera mayor
 
         // Generar nodos en una cuadrícula triangular
-        const gridSize = 5; // Tamaño de la cuadrícula
+        const gridSize = 8; // Tamaño de la cuadrícula
         const scale = 1.5; // Factor de escala para mejor visualización
 
         // Crear nodos
@@ -72,7 +72,7 @@ export class TonnetzGrid {
 
                 // Calcular nota usando la fórmula del documento
                 const noteIndex = ((7 * i + 4 * j) % 12 + 12) % 12;
-                const note = NOTES[noteIndex];
+                const note = NOTES[noteIndex] + '4';
                 this.nodeNotes.set(nodeId, note);
 
                 // Crear y posicionar etiqueta
@@ -118,7 +118,6 @@ export class TonnetzGrid {
     createConnection(node1, node2) {
         const geometry = new THREE.BufferGeometry();
         geometry.setFromPoints([node1.position, node2.position]);
-        geometry.computeLineDistances();
 
         const material = this.connectionMaterial.clone();
         const line = new THREE.Line(geometry, material);
