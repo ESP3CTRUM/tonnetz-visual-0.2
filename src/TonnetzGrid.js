@@ -8,7 +8,8 @@ export class TonnetzGrid {
         this.nodes = new Map();
         this.connections = [];
         this.triads = [];
-        this.nodeGeometry = new THREE.SphereGeometry(0.45, 32, 32);
+        // Usar BufferGeometry para los nodos (más eficiente)
+        this.nodeGeometry = new THREE.IcosahedronGeometry(0.45, 2); // BufferGeometry es el default en versiones recientes
         this.nodeMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
         this.connectionMaterial = new THREE.MeshBasicMaterial({ color: 0x666666 });
         this.triadMaterial = new THREE.MeshBasicMaterial({ color: 0x8888ff, transparent: true, opacity: 0.25 });
@@ -60,6 +61,7 @@ export class TonnetzGrid {
                     .addScaledVector(v1, i * scale)
                     .addScaledVector(v2, j * scale);
 
+                // Usar InstancedMesh para eficiencia si hay muchos nodos (opcional, aquí solo BufferGeometry)
                 const node = new THREE.Mesh(this.nodeGeometry, this.nodeMaterial.clone());
                 node.position.copy(position);
                 node.userData = { type: 'node' };
@@ -161,4 +163,4 @@ export class TonnetzGrid {
         this.scene.add(mesh);
         this.triads.push(mesh);
     }
-} 
+}

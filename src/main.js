@@ -13,6 +13,8 @@ const PALETTES = {
 };
 
 class TonnetzVisualizer {
+    static CAMERA_Y_MAX = 10;
+    static CAMERA_Y_MIN = -10;
     constructor() {
         this.scene = new THREE.Scene();
         this.camera = new THREE.PerspectiveCamera(
@@ -37,6 +39,7 @@ class TonnetzVisualizer {
 
         // Crear la cuadrícula del Tonnetz
         this.tonnetzGrid = new TonnetzGrid(this.scene);
+        this.centerCameraOnGrid();
 
         // Configurar raycaster para interacción
         this.raycaster = new THREE.Raycaster();
@@ -59,6 +62,12 @@ class TonnetzVisualizer {
         this.currentPalette = 'warm';
         this.applyPalette('warm');
         this.setupUIControls();
+
+        // --- OPTIMIZACIÓN: BUFFER CIRCULAR PARA NODOS Y CONECTORES ---
+        // Pool de objetos reutilizables para nodos y conexiones
+        // (para grids grandes, pero aquí se deja preparado para escalabilidad)
+        this.nodePool = [];
+        this.connectionPool = [];
 
         // Iniciar el bucle de renderizado
         this.animate();
@@ -165,41 +174,62 @@ class TonnetzVisualizer {
             .start();
     }
 
+    // Centrado dinámico de cámara al grid
+    centerCameraOnGrid() {
+        // Calcular el centroide de todos los nodos
+        let sum = new THREE.Vector3(0, 0, 0);
+        let count = 0;
+        for (const node of this.tonnetzGrid.nodes.values()) {
+            sum.add(node.position);
+            count++;
+        }
+        if (count > 0) {
+            sum.divideScalar(count);
+            this.camera.position.x = sum.x;
+            this.camera.position.y = sum.y;
+            // Mantener la distancia z
+        }
+        this.controls.target.set(sum.x, sum.y, 0);
+        this.controls.update();
+    }
+
     setupInteraction() {
         window.addEventListener('click', async (event) => {
             await audioEngine.resumeContext();
             this.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
             this.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
             this.raycaster.setFromCamera(this.mouse, this.camera);
-            // Buscar intersección con nodos y triángulos
-            const objects = [
-                ...Array.from(this.tonnetzGrid.nodes.values()),
-                ...this.tonnetzGrid.triads
-            ];
-            const intersects = this.raycaster.intersectObjects(objects);
-            if (intersects.length > 0) {
-                const obj = intersects[0].object;
-                if (obj.userData.type === 'node') {
-                    // Animar nodo
+            // Buscar intersección con triángulos primero (hitbox triangular)
+            const triadIntersects = this.raycaster.intersectObjects(this.tonnetzGrid.triads);
+            if (triadIntersects.length > 0) {
+                const triad = triadIntersects[0].object;
+                this.animateTriad(triad, 0xffff00);
+                // Animar y reproducir las notas de los nodos de la triada
+                for (const node of triad.userData.nodes) {
                     for (const [id, mesh] of this.tonnetzGrid.nodes.entries()) {
-                        if (mesh === obj) {
-                            this.animateNode(id, 0xff0000);
+                        if (mesh === node) {
+                            this.animateNode(id, 0xffff00);
                             const note = this.tonnetzGrid.getNodeNote(id);
                             if (note) {
                                 audioEngine.playNote(note);
                             }
-                            break;
                         }
                     }
-                } else if (obj.userData.type === 'triad') {
-                    // Animar triada y sus nodos
-                    this.animateTriad(obj, 0xffff00);
-                    for (const node of obj.userData.nodes) {
-                        for (const [id, mesh] of this.tonnetzGrid.nodes.entries()) {
-                            if (mesh === node) {
-                                this.animateNode(id, 0xffff00);
-                            }
+                }
+                return; // Si se hace clic en triada, no procesar nodos
+            }
+            // Si no, buscar intersección con nodos
+            const nodeIntersects = this.raycaster.intersectObjects(Array.from(this.tonnetzGrid.nodes.values()));
+            if (nodeIntersects.length > 0) {
+                const obj = nodeIntersects[0].object;
+                for (const [id, mesh] of this.tonnetzGrid.nodes.entries()) {
+                    if (mesh === obj) {
+                        this.animateNode(id, 0xff0000);
+                        const note = this.tonnetzGrid.getNodeNote(id);
+                        if (note) {
+                            audioEngine.playNote(note);
                         }
+                        break;
                     }
                 }
             }
@@ -216,6 +246,8 @@ class TonnetzVisualizer {
         requestAnimationFrame(this.animate.bind(this));
         this.controls.update();
         TWEEN.update();
+        // Limitar la posición Y de la cámara
+        this.camera.position.y = Math.max(Math.min(this.camera.position.y, TonnetzVisualizer.CAMERA_Y_MAX), TonnetzVisualizer.CAMERA_Y_MIN); // Clamp eje Y
         this.renderer.render(this.scene, this.camera);
     }
 
@@ -261,6 +293,64 @@ class TonnetzVisualizer {
             conn.material.color.set(palette.line);
         }
     }
+
+    // Métodos para obtener y liberar nodos/conexiones (buffer circular)
+    getNodeFromPool() {
+        if (this.nodePool.length > 0) {
+            const node = this.nodePool.pop();
+            node.visible = true;
+            return node;
+        }
+        return new THREE.Mesh(this.tonnetzGrid.nodeGeometry, this.tonnetzGrid.nodeMaterial.clone());
+    }
+    releaseNodeToPool(node) {
+        node.visible = false;
+        this.nodePool.push(node);
+    }
+    getConnectionFromPool() {
+        if (this.connectionPool.length > 0) {
+            const conn = this.connectionPool.pop();
+            conn.visible = true;
+            return conn;
+        }
+        return new THREE.Line(new THREE.BufferGeometry(), this.tonnetzGrid.connectionMaterial.clone());
+    }
+    releaseConnectionToPool(conn) {
+        conn.visible = false;
+        this.connectionPool.push(conn);
+    }
 }
 
-const app = new TonnetzVisualizer();
+// Pantalla de carga
+const loadingOverlay = document.createElement('div');
+loadingOverlay.id = 'loading-overlay';
+loadingOverlay.style.position = 'fixed';
+loadingOverlay.style.top = '0';
+loadingOverlay.style.left = '0';
+loadingOverlay.style.width = '100vw';
+loadingOverlay.style.height = '100vh';
+loadingOverlay.style.background = 'rgba(20,20,20,0.95)';
+loadingOverlay.style.display = 'flex';
+loadingOverlay.style.alignItems = 'center';
+loadingOverlay.style.justifyContent = 'center';
+loadingOverlay.style.zIndex = '1000';
+loadingOverlay.innerHTML = '<span style="color:white;font-size:2rem;">Cargando Tonnetz...</span>';
+document.body.appendChild(loadingOverlay);
+
+// LoadingManager de Three.js
+const loadingManager = new THREE.LoadingManager();
+loadingManager.onLoad = () => {
+    loadingOverlay.style.display = 'none';
+};
+
+// Modificar la inicialización para esperar a que todo esté listo
+async function startApp() {
+    // Esperar a que el instrumento de audio cargue
+    await audioEngine.init();
+    // Inicializar visualizador
+    const app = new TonnetzVisualizer();
+    // Ocultar overlay si todo está listo
+    loadingManager.onLoad();
+}
+
+startApp();
