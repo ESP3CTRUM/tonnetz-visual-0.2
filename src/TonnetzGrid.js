@@ -50,7 +50,7 @@ export class TonnetzGrid {
         const v2 = new THREE.Vector3(0.5, Math.sqrt(3)/2, 0); // tercera mayor
 
         // Generar nodos en una cuadrícula triangular
-        const gridSize = 8; // Tamaño de la cuadrícula
+        const gridSize = 5; // Tamaño de la cuadrícula
         const scale = 1.5; // Factor de escala para mejor visualización
 
         // Crear nodos

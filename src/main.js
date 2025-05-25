@@ -144,18 +144,32 @@ class TonnetzVisualizer {
     animateNode(nodeId, color) {
         const node = this.tonnetzGrid.nodes.get(nodeId);
         if (!node) return;
+
         // Animar color
         const origColor = node.material.color.clone();
+        // Cancelar cualquier animación previa en este nodo con el mismo objetivo
+        TWEEN.removeAll(node.material.color);
+
         new TWEEN.Tween(node.material.color)
             .to({ r: ((color >> 16) & 0xff) / 255, g: ((color >> 8) & 0xff) / 255, b: (color & 0xff) / 255 }, 150)
             .yoyo(true)
             .repeat(1)
+            .onComplete(() => {
+                node.material.color.copy(origColor); // Restaurar color original
+            })
             .start();
         // Animar escala
+        const origScale = node.scale.clone();
+        // Cancelar cualquier animación previa en este nodo con el mismo objetivo
+        TWEEN.removeAll(node.scale);
+
         new TWEEN.Tween(node.scale)
             .to({ x: 1.5, y: 1.5, z: 1.5 }, 150)
             .yoyo(true)
             .repeat(1)
+            .onComplete(() => {
+                node.scale.copy(origScale); // Restaurar tamaño original
+            })
             .start();
     }
 
