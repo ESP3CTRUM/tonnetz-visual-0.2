@@ -145,48 +145,110 @@ class TonnetzVisualizer {
         const node = this.tonnetzGrid.nodes.get(nodeId);
         if (!node) return;
 
-        // Animar color
-        const origColor = node.material.color.clone();
-        // Cancelar cualquier animación previa en este nodo con el mismo objetivo
-        TWEEN.removeAll(node.material.color);
+        // Detener y limpiar animaciones anteriores para este nodo
+        if (node._colorTweenTo) node._colorTweenTo.stop();
+        if (node._colorTweenBack) node._colorTweenBack.stop();
+        if (node._scaleTweenTo) node._scaleTweenTo.stop();
+        if (node._scaleTweenBack) node._scaleTweenBack.stop();
 
-        new TWEEN.Tween(node.material.color)
-            .to({ r: ((color >> 16) & 0xff) / 255, g: ((color >> 8) & 0xff) / 255, b: (color & 0xff) / 255 }, 150)
-            .yoyo(true)
-            .repeat(1)
-            .onComplete(() => {
-                node.material.color.copy(origColor); // Restaurar color original
-            })
-            .start();
-        // Animar escala
-        const origScale = node.scale.clone();
-        // Cancelar cualquier animación previa en este nodo con el mismo objetivo
-        TWEEN.removeAll(node.scale);
+        // *** Restablecer estado original inmediatamente ***
+        const defaultColor = PALETTES[this.currentPalette].node;
+        node.material.color.set(defaultColor);
+        node.scale.set(1, 1, 1);
 
-        new TWEEN.Tween(node.scale)
+        // Animar color (ida y vuelta)
+        const colorTweenTo = new TWEEN.Tween(node.material.color)
+            .to(
+                {
+                    r: ((color >> 16) & 0xff) / 255,
+                    g: ((color >> 8) & 0xff) / 255,
+                    b: (color & 0xff) / 255
+                },
+                150
+            )
+            .easing(TWEEN.Easing.Quadratic.Out);
+
+        const colorTweenBack = new TWEEN.Tween(node.material.color)
+            .to(new THREE.Color(defaultColor), 150)
+            .easing(TWEEN.Easing.Quadratic.In);
+
+        colorTweenTo.chain(colorTweenBack);
+
+        // Animar escala (ida y vuelta)
+        const scaleTweenTo = new TWEEN.Tween(node.scale)
             .to({ x: 1.5, y: 1.5, z: 1.5 }, 150)
-            .yoyo(true)
-            .repeat(1)
-            .onComplete(() => {
-                node.scale.copy(origScale); // Restaurar tamaño original
-            })
-            .start();
+            .easing(TWEEN.Easing.Quadratic.Out);
+
+        const scaleTweenBack = new TWEEN.Tween(node.scale)
+            .to({ x: 1, y: 1, z: 1 }, 150)
+            .easing(TWEEN.Easing.Quadratic.In);
+
+        scaleTweenTo.chain(scaleTweenBack);
+
+        // Almacenar referencias y limpiar al completar
+        node._colorTweenTo = colorTweenTo;
+        node._colorTweenBack = colorTweenBack;
+        node._scaleTweenTo = scaleTweenTo;
+        node._scaleTweenBack = scaleTweenBack;
+
+        colorTweenBack.onComplete(() => { delete node._colorTweenTo; delete node._colorTweenBack; });
+        scaleTweenBack.onComplete(() => { delete node._scaleTweenTo; delete node._scaleTweenBack; });
+
+        // Iniciar animaciones
+        colorTweenTo.start();
+        scaleTweenTo.start();
     }
 
     animateTriad(triad, color) {
         if (!triad) return;
-        // Animar color
-        new TWEEN.Tween(triad.material.color)
+
+        // Detener y limpiar animaciones anteriores para esta triada
+        if (triad._colorTweenTo) triad._colorTweenTo.stop();
+        if (triad._colorTweenBack) triad._colorTweenBack.stop();
+        if (triad._scaleTweenTo) triad._scaleTweenTo.stop();
+        if (triad._scaleTweenBack) triad._scaleTweenBack.stop();
+
+        // *** Restablecer estado original inmediatamente ***
+        // Las triadas no tienen un color de paleta por defecto directo como los nodos,
+        // pero podemos asumir que si no están animadas, su color es el de línea de la paleta actual.
+        const defaultColor = PALETTES[this.currentPalette].line;
+        triad.material.color.set(defaultColor);
+        triad.scale.set(1, 1, 1);
+
+        // Animar color (ida y vuelta)
+        const colorTweenTo = new TWEEN.Tween(triad.material.color)
             .to({ r: ((color >> 16) & 0xff) / 255, g: ((color >> 8) & 0xff) / 255, b: (color & 0xff) / 255 }, 150)
-            .yoyo(true)
-            .repeat(1)
-            .start();
-        // Animar escala
-        new TWEEN.Tween(triad.scale)
+            .easing(TWEEN.Easing.Quadratic.Out);
+
+        const colorTweenBack = new TWEEN.Tween(triad.material.color)
+            .to(new THREE.Color(defaultColor), 150)
+            .easing(TWEEN.Easing.Quadratic.In);
+
+        colorTweenTo.chain(colorTweenBack);
+
+        // Animar escala (ida y vuelta)
+        const scaleTweenTo = new TWEEN.Tween(triad.scale)
             .to({ x: 1.5, y: 1.5, z: 1.5 }, 150)
-            .yoyo(true)
-            .repeat(1)
-            .start();
+            .easing(TWEEN.Easing.Quadratic.Out);
+
+        const scaleTweenBack = new TWEEN.Tween(triad.scale)
+            .to({ x: 1, y: 1, z: 1 }, 150)
+            .easing(TWEEN.Easing.Quadratic.In);
+
+        scaleTweenTo.chain(scaleTweenBack);
+
+        // Almacenar referencias y limpiar al completar
+        triad._colorTweenTo = colorTweenTo;
+        triad._colorTweenBack = colorTweenBack;
+        triad._scaleTweenTo = scaleTweenTo;
+        triad._scaleTweenBack = scaleTweenBack;
+
+        colorTweenBack.onComplete(() => { delete triad._colorTweenTo; delete triad._colorTweenBack; });
+        scaleTweenBack.onComplete(() => { delete triad._scaleTweenTo; delete triad._scaleTweenBack; });
+
+        // Iniciar animaciones
+        colorTweenTo.start();
+        scaleTweenTo.start();
     }
 
     // Centrado dinámico de cámara al grid
